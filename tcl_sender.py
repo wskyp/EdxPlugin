@@ -6,8 +6,6 @@ import time
 import os
 import logging
 
-from leapr_config import *
-
 from config import DEFAULT_CONFIG
 
 # 配置日志
@@ -17,7 +15,7 @@ logger.setLevel(logging.DEBUG)
 if not logger.handlers:
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
@@ -26,9 +24,18 @@ class TCLSender:
     # 输入是tcl命令列表，将命令列表写到command.tcl文件里
     def send_tcl(self, tcl_command_list):
         # 如果是windows环境，直接返回API_DIR目录下的server_result.txt文件--用于本地调试
+        if tcl_command_list is None:
+            logger.info("not send any command...")
+            return []
         if os.name == 'nt':
             logger.info("Running on Windows, returning server_result.txt content for local debugging")
-            return [line.rstrip('\n') for line in open(DEFAULT_CONFIG.get("api_dir") + "server_result.txt", "r")]
+            server_result_path = DEFAULT_CONFIG.get("api_dir") + "server_result.txt"
+            if os.path.exists(server_result_path):
+                with open(server_result_path, "r") as f:
+                    return [line.rstrip('\n') for line in f]
+            else:
+                logger.warning(f"Server result file does not exist: {server_result_path}, returning empty list")
+                return []
         # 1. 写命令
         command_tcl_path = os.path.join(DEFAULT_CONFIG.get("api_dir"), "command.tcl")
         logger.info(f"Writing TCL commands to {command_tcl_path}")
@@ -59,9 +66,10 @@ class TCLSender:
             logger.warning("Server result file does not exist, returning empty list")
             return []
         server_file = open(server_result_txt_path, "r")
-        result = [s.rstrip('\n') for s in server_file.readlines()]
-        logger.info(f"Successfully read {len(result)} lines from server result")
-        return result
+        eda_resp = [s.rstrip('\n') for s in server_file.readlines()]
+        os.remove(server_result_txt_path)
+        logger.info(f"Successfully read {len(eda_resp)} lines from server result")
+        return eda_resp
 
 
     # 发送tcl脚本
@@ -72,9 +80,9 @@ class TCLSender:
             tcl_command_list = f.readlines()
         logger.info(f"Loaded {len(tcl_command_list)} commands from TCL file")
         # 2. 发送tcl命令
-        result = self.send_tcl(tcl_command_list)
-        logger.info(f"TCL file execution completed, received {len(result)} lines of result")
-        return result
+        eda_resp = self.send_tcl(tcl_command_list)
+        logger.info(f"TCL file execution completed, received {len(eda_resp)} lines of result")
+        return eda_resp
 
 if __name__ == '__main__':
     tcl_sender = TCLSender()

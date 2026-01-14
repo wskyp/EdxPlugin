@@ -61,6 +61,57 @@ Windows 脚本目前使用默认参数启动，如需自定义参数，请直接
 python run_server.py --host 0.0.0.0 --port 5000 --debug
 ```
 
+## API 接口测试脚本
+
+### 文件名
+- `test_api_curl.sh` - Linux/Mac API接口测试脚本
+
+### 权限设置
+首次使用前需要给脚本赋予执行权限：
+```bash
+chmod +x test_api_curl.sh
+```
+
+### 基本用法
+```bash
+./test_api_curl.sh
+```
+
+### 参数说明
+- `--host HOST` - 指定服务器主机地址，默认为 `localhost`
+- `--port PORT` - 指定服务器端口，默认为 `5000`
+- `--help` - 显示帮助信息
+
+### 使用示例
+
+1. 测试默认服务：
+   ```bash
+   ./test_api_curl.sh
+   ```
+
+2. 测试指定主机的服务：
+   ```bash
+   ./test_api_curl.sh --host 192.168.1.100
+   ```
+
+3. 测试指定端口的服务：
+   ```bash
+   ./test_api_curl.sh --port 8080
+   ```
+
+4. 组合参数：
+   ```bash
+   ./test_api_curl.sh --host 192.168.1.100 --port 8080
+   ```
+
+### 测试内容
+脚本会自动测试以下API端点：
+- 主页面接口 (`GET /`)
+- 加载网表接口 (`POST /leapr/load_netlist`)
+- 获取时序信息接口 (`GET /leapr/get_timing`) - 包括不同topn参数的测试
+- 执行TCL命令接口 (`POST /leapr/execute_tcl`)
+- 执行cell摆放接口 (`POST /leapr/place_cells`)
+
 ## 脚本功能特点
 
 1. **自动环境检测** - 自动检测系统中的 Python 版本
@@ -78,9 +129,10 @@ python run_server.py --host 0.0.0.0 --port 5000 --debug
 
 ## 日志文件
 
-服务运行过程中会生成以下日志文件：
-- `edx_plugin.log` - 主要服务日志
-- `server_startup.log` - 服务启动日志
+服务运行过程中会在 `tmp/` 目录下生成以下日志文件：
+- `tmp/edx_plugin.log` - 主要服务日志
+- `tmp/server_startup.log` - 服务启动日志
+- `tmp/tcl_sender.log` - TCL发送器日志
 
 ## 故障排除
 
@@ -88,4 +140,4 @@ python run_server.py --host 0.0.0.0 --port 5000 --debug
 1. Python 3.7+ 是否已正确安装
 2. `requirements.txt` 中的依赖是否已安装
 3. 端口是否被其他服务占用
-4. 日志文件中的错误信息
+4. `tmp/` 目录下的日志文件中的错误信息

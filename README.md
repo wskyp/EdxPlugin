@@ -90,13 +90,42 @@
    
 或者双击 `start_server.bat` 批处理文件。
 
+## API接口测试
+
+我们提供了 `test_api_curl.sh` 脚本来测试API接口：
+
+1. 使脚本可执行：
+   ```bash
+   chmod +x test_api_curl.sh
+   ```
+
+2. 运行测试：
+   ```bash
+   ./test_api_curl.sh
+   ```
+
+3. 自定义参数：
+   ```bash
+   # 测试指定主机
+   ./test_api_curl.sh --host 192.168.1.100
+   
+   # 测试指定端口
+   ./test_api_curl.sh --port 8080
+   ```
+
+测试内容包括：
+- 主页面接口
+- 加载网表接口
+- 获取时序信息接口（包括不同topn参数的测试）
+- 执行TCL命令接口
+- 执行cell摆放接口
+
 ## 日志功能
 
-系统会自动记录所有操作到 `edx_plugin.log` 文件中，包括：
-- 工具初始化信息
-- API请求和响应
-- 错误和异常信息
-- 操作成功和失败的状态
+系统会自动记录所有操作到 `tmp/` 目录下的日志文件中，包括：
+- `tmp/edx_plugin.log` - 主要服务日志
+- `tmp/server_startup.log` - 服务启动日志
+- `tmp/tcl_sender.log` - TCL发送器日志
 
 日志格式为：`时间戳 级别 工具名 信息`
 
@@ -172,9 +201,16 @@ curl -X POST http://localhost:5000/leapr/load_netlist \
 
 获取指定EDA工具的时序分析结果。
 
+#### 查询参数
+- `topn`: 返回最差时序路径的数量 (可选)
+
 #### 示例请求 (Leapr)
 ```bash
+# 获取所有时序信息
 curl -X GET http://localhost:5000/leapr/get_timing
+
+# 只获取前2条最差时序路径
+curl -X GET http://localhost:5000/leapr/get_timing?topn=2
 ```
 
 #### 响应示例 (Leapr)
@@ -195,7 +231,10 @@ curl -X GET http://localhost:5000/leapr/get_timing
       "dynamic": 12.5,
       "static": 0.8
     },
-    "critical_path": [...],
+    "critical_path": [
+      {"cell": "INV_X1", "delay": 0.234, "transition_time": 0.12},
+      {"cell": "NAND2_X1", "delay": 0.321, "transition_time": 0.15}
+    ],
     "worst_clock": "clk",
     "timing_violations": 2
   }

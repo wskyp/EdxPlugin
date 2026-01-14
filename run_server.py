@@ -10,17 +10,24 @@ import subprocess
 import argparse
 import logging
 from datetime import datetime
+from pathlib import Path
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 def setup_logging(log_level=logging.INFO):
     """设置日志记录"""
+    # 创建tmp目录
+    tmp_dir = Path(__file__).resolve().parent / 'tmp'
+    tmp_dir.mkdir(exist_ok=True)
+    
+    log_file_path = tmp_dir / 'server_startup.log'
+    
     logging.basicConfig(
         level=log_level,
-        format='%(asctime)s %(levelname)s %(name)s %(message)s',
+        format='%(asctime)s %(levelname)s %(name)s [%(filename)s:%(lineno)d] %(message)s',
         handlers=[
-            logging.FileHandler('server_startup.log'),
+            logging.FileHandler(log_file_path),
             logging.StreamHandler(sys.stdout)
         ]
     )

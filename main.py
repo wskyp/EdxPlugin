@@ -1,20 +1,20 @@
 import re
-
 from flask import Flask, request, jsonify
+from plugin_data import *
+from tcl_sender import *
 import json
-import os
-from config import DEFAULT_CONFIG
-import logging
-from datetime import datetime
-from plugin_data import Design, Cell as DataCell, STA, TimingPath, EdxResponse
-from tcl_sender import TCLSender
+
+# 创建tmp目录
+tmp_dir = os.path.join(os.path.dirname(__file__), 'tmp')
+os.makedirs(tmp_dir, exist_ok=True)
 
 # 配置日志
+log_file_path = os.path.join(tmp_dir, 'edx_plugin.log')
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+    format='%(asctime)s %(levelname)s %(name)s [%(filename)s:%(lineno)d] %(message)s',
     handlers=[
-        logging.FileHandler('edx_plugin.log'),
+        logging.FileHandler(log_file_path),
         logging.StreamHandler()
     ]
 )
@@ -36,13 +36,13 @@ class BaseEDA_Tool:
     def load_netlist(self) -> Design:
         raise NotImplementedError("Subclasses must implement this method")
     
-    def get_timing_info(self, topn = 10) -> STA:
+    def get_timing_info(self, topn=10) -> STA:
         raise NotImplementedError("Subclasses must implement this method")
     
-    def execute_tcl_command(self, tcl_commands: list[str]) -> list[str]:
+    def execute_tcl_command(self, tcl_commands) -> list[str]:
         raise NotImplementedError("Subclasses must implement this method")
     
-    def place_cells(self, cells: list[DataCell]) -> list[str]:
+    def place_cells(self, cells: list[Cell]) -> list[str]:
         raise NotImplementedError("Subclasses must implement this method")
 
 # 不同EDA工具的具体实现
@@ -93,7 +93,7 @@ class Leapr_Tool(BaseEDA_Tool):
                 pin = pin.strip()
                 if pin:  # 确保不是空字符串
                     my_design.pin_to_cell[pin] = cell_name
-            my_design.cells[cell_name] = DataCell(cell_name, loc_x, loc_y, cell_width, cell_height, cell_orient)
+            my_design.cells[cell_name] = Cell(cell_name, loc_x, loc_y, cell_width, cell_height, cell_orient, place_status=cell_place_status)
         for i in range(row_counter + 1, len(result)):
             # 读取net
             net_info = result[i].strip()
@@ -111,8 +111,10 @@ class Leapr_Tool(BaseEDA_Tool):
         logger.info(f"[Leapr] begin loading netlist: {netlist_file_path}")
         return my_design
 
-    def get_timing_info(self, topn=10):
-        """Leapr特有的时序分析功能"""
+    def get_timing_info(self, topn=10) -> STA:
+        """Leapr特有的时序分析功能
+        :param topn:
+        """
         tcl_sender = TCLSender()
         api_dir = DEFAULT_CONFIG.get("api_dir")
         tcl_sender.send_tcl([f'report_timing -group REG2REG -max_paths {topn} -path_type full > {api_dir}/report'])
@@ -187,7 +189,7 @@ class Leapr_Tool(BaseEDA_Tool):
         logger.info(f"[Leapr] 执行TCL命令: {tcl_commands}")
         return TCLSender().send_tcl(tcl_commands)
 
-    def place_cells(self, cells: list[DataCell]):
+    def place_cells(self, cells: list[Cell]):
         tcl_cmds = []
         for cell in cells:
             tcl_cmds.append(f'place_cell {cell.get_cell_name()} {cell.get_x():.2f} {cell.get_y():.2f} -placed')
@@ -207,7 +209,7 @@ def home():
         "message": "EDX Plugin REST API for Multiple EDA Tools",
         "version": "2.3",
         "supported_tools": list(eda_tools.keys()),
-        "config_info": {tool: {"version": "1.0", "features": list(config.keys())} 
+        "config_info": {tool: {"version": "1.0", "features": list(config.keys()) if isinstance(config, dict) else []} 
                         for tool, config in DEFAULT_CONFIG.items()},
         "endpoints": [
             "/<tool_name>/load_netlist",
@@ -232,33 +234,40 @@ def load_netlist(tool_name):
         if tool_name not in eda_tools:
             error_msg = f"Unsupported EDA tool: {tool_name}. Supported tools: {list(eda_tools.keys())}"
             logger.error(error_msg)
-            return jsonify(EdxResponse(400, error_msg)), 400
+            return jsonify(EdxResponse(400, error_msg).to_dict()), 400
         design = eda_tools[tool_name].load_netlist()
-        return jsonify(EdxResponse(200, 'success',  design)), 200
+        logger.info(f"[{tool_name}] 网表加载成功, cell number is {len(design.cells)}")
+        return jsonify(EdxResponse(200, 'success',  design).to_dict()), 200
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[{tool_name}] 加载网表时发生未预期异常: {error_msg}")
-        return jsonify(EdxResponse(500, "Internal server error")), 500
+        return jsonify(EdxResponse(500, "Internal server error").to_dict()), 500
 
 
 @app.route('/<tool_name>/get_timing', methods=['GET'])
 def get_timing(tool_name):
     """
     获取时序信息
+    查询参数:
+    - topn: 获取前N个时序路径，默认为10
     """
     logger.info(f"接收到[{tool_name}]的获取时序信息请求")
     try:
         if tool_name not in eda_tools:
             error_msg = f"Unsupported EDA tool: {tool_name}. Supported tools: {list(eda_tools.keys())}"
             logger.error(error_msg)
-            return jsonify(EdxResponse(400, "Unsupported EDA tool")), 400
+            return jsonify(EdxResponse(400, "Unsupported EDA tool").to_dict()), 400
         
-        sta = eda_tools[tool_name].get_timing_info()
-        return jsonify(EdxResponse(200, "success", sta)), 200
+        # 获取查询参数topn，默认值为10
+        topn = request.args.get('topn', default=10, type=int)
+        sta = eda_tools[tool_name].get_timing_info(topn)
+
+        response_data = EdxResponse(200, "success", sta)
+        return jsonify(response_data.to_dict()), 200
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[{tool_name}] 获取时序信息时发生未预期异常: {error_msg}")
-        return jsonify(EdxResponse(500, "Internal server error")), 500
+        return jsonify(EdxResponse(500, "Internal server error").to_dict()), 500
 
 
 @app.route('/<tool_name>/execute_tcl', methods=['POST'])
@@ -266,23 +275,27 @@ def execute_tcl(tool_name):
     """
     执行TCL命令
     请求体参数:
-    - command: TCL命令字符串
+    - commands: TCL命令字符串列表，列表中每个元素就是一行命令
     """
     logger.info(f"接收到[{tool_name}]的执行TCL命令请求")
     try:
         if tool_name not in eda_tools:
             error_msg = f"Unsupported EDA tool: {tool_name}. Supported tools: {list(eda_tools.keys())}"
             logger.error(error_msg)
-            return jsonify(EdxResponse(400, "Unsupported EDA tool")), 400
+            return jsonify(EdxResponse(400, "Unsupported EDA tool").to_dict()), 400
         
         data = request.get_json()
-        command = data.get('command')
-        eda_tools[tool_name].execute_tcl_command(command)
-        return jsonify(EdxResponse(200, "success")), 200
+        command = data.get('commands')
+        eda_resp = eda_tools[tool_name].execute_tcl_command(command)
+        # 如果result为None，将其设为空列表
+        if eda_resp is None:
+            eda_resp = []
+        logger.info(f"[{tool_name}] TCL命令执行完成, result is {eda_resp}")
+        return jsonify(EdxResponse(200, "success", eda_resp).to_dict()), 200
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[{tool_name}] 执行TCL命令时发生未预期异常: {error_msg}")
-        return jsonify(EdxResponse(500, "Internal server error")), 500
+        return jsonify(EdxResponse(500, "Internal server error").to_dict()), 500
 
 
 @app.route('/<tool_name>/place_cells', methods=['POST'])
@@ -290,26 +303,49 @@ def place_cells(tool_name):
     """
     执行cell摆放
     请求体参数:
-    - params: 摆放参数 (可选)
+    [
+        {
+            "cell_name": xx,
+            "x": 1.2,
+            "y": 2.1,
+            "width": 2.2,
+            "height": 4.2,
+            "orient": "R0",
+            "place_status": "placed"
+        }
+    ]
     """
     logger.info(f"接收到[{tool_name}]的执行cell摆放请求")
     try:
         if tool_name not in eda_tools:
             error_msg = f"Unsupported EDA tool: {tool_name}. Supported tools: {list(eda_tools.keys())}"
             logger.error(error_msg)
-            return jsonify(EdxResponse(400, "Unsupported EDA tool")), 400
+            return jsonify(EdxResponse(400, "Unsupported EDA tool", {}).to_dict()), 400
         
         data = request.get_json()
-        params = data.get('params', {})
-        
-        result = eda_tools[tool_name].place_cells(params)
-        status_code = result.get('code', 500)
-        logger.info(f"[{tool_name}] 执行cell摆放请求处理完成，状态码: {status_code}")
-        return jsonify(EdxResponse(200, "success")), 200
+        # 直接使用请求体数据作为cell列表，根据注释中的格式进行解析
+        cell_list = []
+        print('======================')
+        print(data)
+        for cell_data in data:
+            cell = Cell(
+                cell_data["cell_name"],
+                cell_data["x"],
+                cell_data["y"],
+                cell_data.get("width", 0.0),  # 使用get方法，如果没有宽度则默认为0
+                cell_data.get("height", 0.0), # 使用get方法，如果没有高度则默认为0
+                cell_data.get("orient", ""), # 使用get方法，如果没有方向则默认为空字符串
+                place_status=cell_data.get("place_status", "") # 使用get方法，如果没有放置状态则默认为空字符串
+            )
+            cell_list.append(cell)
+        print('====================2222==')
+        eda_tools[tool_name].place_cells(cell_list)
+        logger.info(f"[{tool_name}] 执行cell摆放请求处理完成")
+        return jsonify(EdxResponse(200, "success", {}).to_dict()), 200
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[{tool_name}] 执行cell摆放时发生未预期异常: {error_msg}")
-        return jsonify(EdxResponse(500, "Internal server error")), 500
+        return jsonify(EdxResponse(500, "Internal server error", {}).to_dict()), 500
 
 
 if __name__ == '__main__':

@@ -50,8 +50,8 @@ fi
 
 # 检查Python是否可用
 PYTHON_CMD=""
-if command -v python3 &> /dev/null; then
-    PYTHON_CMD="python3"
+if command -v python3.9 &> /dev/null; then
+    PYTHON_CMD="python3.9"
 elif command -v python &> /dev/null; then
     PYTHON_CMD="python"
 else

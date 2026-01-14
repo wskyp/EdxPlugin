@@ -1,6 +1,5 @@
 # 这个脚本主要是EDA读取，用来后续AI工具给EDA工具喂命令的
 # 设置脚本交互目录
-set api_dir /data/wskyp/cases/top_ASAP7/api
 puts "api dir is ${api_dir}"
 # 写一个死循环，不断读取目录下是否有client_result文件
 proc monitor_client_result {} {
@@ -20,7 +19,7 @@ proc monitor_client_result {} {
                 # 执行命令,添加异常保护
                 try {
                     puts "执行 command.tcl $command_path"
-                    source /data/wskyp/cases/top_ASAP7/api/command.tcl
+                    source $command_path
                 } on error {errorMsg options} {
                     puts "execute failed"
                 } on ok {} {
