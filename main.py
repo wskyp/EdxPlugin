@@ -205,7 +205,7 @@ eda_tools = {
 @app.route('/')
 def home():
     logger.info("接收到来自主页的请求")
-    response = {
+    response_data = {
         "message": "EDX Plugin REST API for Multiple EDA Tools",
         "version": "2.3",
         "supported_tools": list(eda_tools.keys()),
@@ -219,7 +219,7 @@ def home():
         ]
     }
     logger.info("主页请求处理完成")
-    return jsonify(response)
+    return jsonify(EdxResponse(200, "Home page", response_data).to_dict())
 
 
 @app.route('/<tool_name>/load_netlist', methods=['POST'])
@@ -325,8 +325,6 @@ def place_cells(tool_name):
         data = request.get_json()
         # 直接使用请求体数据作为cell列表，根据注释中的格式进行解析
         cell_list = []
-        print('======================')
-        print(data)
         for cell_data in data:
             cell = Cell(
                 cell_data["cell_name"],
@@ -338,7 +336,6 @@ def place_cells(tool_name):
                 place_status=cell_data.get("place_status", "") # 使用get方法，如果没有放置状态则默认为空字符串
             )
             cell_list.append(cell)
-        print('====================2222==')
         eda_tools[tool_name].place_cells(cell_list)
         logger.info(f"[{tool_name}] 执行cell摆放请求处理完成")
         return jsonify(EdxResponse(200, "success", {}).to_dict()), 200

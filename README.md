@@ -148,54 +148,46 @@ curl -X GET http://localhost:5000/
 - `leapr`
 
 #### 请求参数
-```json
-{
-  "file_path": "/path/to/netlist.v"
-}
-```
+当前实现中，此接口不需要任何请求参数。Leapr工具会自动读取预设的 `leapr_api/apicommon/get_all_cell_info.tcl` 文件。
 
 #### 示例请求 (Leapr)
 ```bash
 curl -X POST http://localhost:5000/leapr/load_netlist \
   -H "Content-Type: application/json" \
-  -d '{"file_path": "/path/to/netlist.v"}'
+  -d '{}'
 ```
 
 #### 响应示例 (Leapr)
 ```json
 {
-  "code": 200,
-  "message": "Leapr: Successfully loaded netlist: /path/to/netlist.v",
+  "status": 200,
+  "message": "success",
   "data": {
-    "name": "test_design",
-    "top_module": "top_module",
-    "cells": [
-      {
-        "name": "INV_X1",
-        "cell_type": "combinational",
-        "area": 1.2,
-        "power": 0.003,
-        "delay": 0.12,
-        "pins": [],
-        "properties": {}
+    "cells": {
+      "cell_name": {
+        "cell_name": "INV_X1",
+        "x": 100.5,
+        "y": 200.3,
+        "width": 1.2,
+        "height": 2.4,
+        "orient": "R0",
+        "place_status": "placed"
       }
-    ],
-    "nets": [...],
-    "ports": [...],
-    "clocks": [...],
-    "timing_arcs": [...],
-    "hierarchy": ["top_module", "sub_module1", "sub_module2"],
-    "area": 1200.5,
-    "utilization": 75.2,
-    "tool_used": "Leapr",
-    "properties": {
-      "file_path": "/path/to/netlist.v",
-      "size": 1024,
-      "supported_formats": ["verilog", "lef", "gds", "def", "sdc"]
+    },
+    "name": "",
+    "core_width": 78.12,
+    "core_height": 69.192,
+    "pin_to_cell": {
+      "pin_name": "cell_name"
+    },
+    "nets": {
+      "net_name": [["load_pin1", "load_pin2"], ["driver_pin"]]
     }
   }
 }
 ```
+
+> 注：响应中的data字段是Design对象，包含cells（单元格信息）、core_width和core_height（核心区域尺寸）、pin_to_cell（引脚到单元格的映射）和nets（网络连接信息）
 
 ### 2. 获取时序信息 (`GET /<tool_name>/get_timing`)
 
@@ -216,27 +208,25 @@ curl -X GET http://localhost:5000/leapr/get_timing?topn=2
 #### 响应示例 (Leapr)
 ```json
 {
-  "code": 200,
-  "message": "Leapr: Timing analysis completed",
+  "status": 200,
+  "message": "success",
   "data": {
-    "tool": "Leapr",
-    "setup_slack": -0.123,
-    "hold_slack": 0.456,
-    "clock_period": 2.0,
-    "setup_margin": 0.1,
-    "hold_margin": 0.05,
-    "min_pulse_width": 0.5,
-    "clock_skew": 0.05,
-    "power_consumption": {
-      "dynamic": 12.5,
-      "static": 0.8
-    },
-    "critical_path": [
-      {"cell": "INV_X1", "delay": 0.234, "transition_time": 0.12},
-      {"cell": "NAND2_X1", "delay": 0.321, "transition_time": 0.15}
-    ],
-    "worst_clock": "clk",
-    "timing_violations": 2
+    "timing_paths": [
+      {
+        "start_point": "u_startpoint",
+        "end_point": "u_endpoint",
+        "scenario": "func",
+        "path_group": "REG2REG",
+        "path_type": "setup",
+        "path": [
+          ["pin1", 0.1, 0.2],
+          ["pin2", 0.15, 0.3]
+        ],
+        "data_required_time": 1.0,
+        "data_arrival_time": 0.8,
+        "slack": 0.2
+      }
+    ]
   }
 }
 ```
@@ -248,32 +238,29 @@ curl -X GET http://localhost:5000/leapr/get_timing?topn=2
 #### 请求参数
 ```json
 {
-  "command": "place_design"
+  "commands": ["place_design", "route_design"]
 }
 ```
+
+> 注：commands 是一个包含多个TCL命令的数组，将按顺序执行这些命令
 
 #### 示例请求 (Leapr)
 ```bash
 curl -X POST http://localhost:5000/leapr/execute_tcl \
   -H "Content-Type: application/json" \
-  -d '{"command": "place_design"}'
+  -d '{"commands": ["place_design", "route_design"]}'
 ```
 
 #### 响应示例
 ```json
 {
-  "code": 200,
-  "message": "TCL command executed successfully",
-  "data": {
-    "tool": "Leapr",
-    "command": "place_design",
-    "mapped_command": "place_design",
-    "result": "Leapr executed: place_design",
-    "status": "success",
-    "command_type": "other"
-  }
+  "status": 200,
+  "message": "success",
+  "data": []
 }
 ```
+
+> 注：data字段是TCL命令执行结果的字符串数组
 
 ### 4. 执行Cell摆放 (`POST /<tool_name>/place_cells`)
 
@@ -281,46 +268,36 @@ curl -X POST http://localhost:5000/leapr/execute_tcl \
 
 #### 请求参数
 ```json
-{
-  "params": {
-    "utilization": 0.75,
-    "aspect_ratio": 1.0
+[
+  {
+    "cell_name": "INV_X1",
+    "x": 100.5,
+    "y": 200.3,
+    "width": 1.2,
+    "height": 2.4,
+    "orient": "R0",
+    "place_status": "placed"
   }
-}
+]
 ```
 
 #### 示例请求 (Leapr)
 ```bash
 curl -X POST http://localhost:5000/leapr/place_cells \
   -H "Content-Type: application/json" \
-  -d '{"params": {"utilization": 0.75, "aspect_ratio": 1.0}}'
+  -d '[{"cell_name": "u_macc_top/macc[0].u_macc/lc_drvi15_n119", "x": 10.67, "y": 11.12, "width": 10.0, "height": 12.0, "orient": "R0", "place_status": "PLACED"}]
 ```
 
 #### 响应示例 (Leapr)
 ```json
 {
-  "code": 200,
-  "message": "Leapr: Cell placement completed",
-  "data": {
-    "tool": "Leapr",
-    "placement_status": "completed",
-    "utilization": 75.0,
-    "aspect_ratio": 1.0,
-    "target_density": 85.0,
-    "core_area": 2100.3,
-    "routing_layers": ["M1", "M2", "M3", "M4", "M5", "M6"],
-    "congestion_map": "low",
-    "vias_count": 1500,
-    "min_distance_constraint": 0.1,
-    "power_ring_width": 1.0,
-    "placed_cells": [
-      {"name": "BUF_X1", "x": 100.5, "y": 200.3, "orientation": "FN", "layer": "M1"},
-      {"name": "CLKBUF_X2", "x": 150.2, "y": 250.7, "orientation": "FS", "layer": "M2"},
-      {"name": "PHYCELL_X1", "x": 220.8, "y": 180.1, "orientation": "FE", "layer": "M3"}
-    ]
-  }
+  "status": 200,
+  "message": "success",
+  "data": {}
 }
 ```
+
+> 注：data字段通常为空对象，表示cell摆放操作已完成
 
 ## 错误处理
 
@@ -332,9 +309,9 @@ API会返回适当的HTTP状态码和错误信息：
 错误响应格式：
 ```json
 {
-  "code": 400,
+  "status": 400,
   "message": "Error message",
-  "error": "Detailed error information"
+  "data": null
 }
 ```
 
