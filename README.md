@@ -334,10 +334,7 @@ curl -X POST http://localhost:5000/leapr/execute_tcl \
     "cell_name": "INV_X1",
     "x": 100.5,
     "y": 200.3,
-    "width": 1.2,
-    "height": 2.4,
-    "orient": "R0",
-    "place_status": "placed"
+    "orient": "R0"
   }
 ]
 ```
@@ -346,7 +343,7 @@ curl -X POST http://localhost:5000/leapr/execute_tcl \
 ```bash
 curl -X POST http://localhost:5000/leapr/place_cells \
   -H "Content-Type: application/json" \
-  -d '[{"cell_name": "u_macc_top/macc[0].u_macc/lc_drvi15_n119", "x": 10.67, "y": 11.12, "width": 10.0, "height": 12.0, "orient": "R0", "place_status": "PLACED"}]
+  -d '[{"cell_name": "u_macc_top/macc[0].u_macc/lc_drvi15_n119", "x": 10.67, "y": 11.12, "orient": "R0"}]
 ```
 
 #### 响应示例 (Leapr)
