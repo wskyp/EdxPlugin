@@ -5,6 +5,8 @@
 import time
 import os
 import logging
+import gzip
+import shutil
 
 from config import DEFAULT_CONFIG
 
@@ -22,7 +24,7 @@ if not logger.handlers:
 class TCLSender:
 
     # 输入是tcl命令列表，将命令列表写到command.tcl文件里
-    def send_tcl(self, tcl_command_list):
+    def send_tcl(self, tcl_command_list, return_result = True) -> list[str]:
         # 如果是windows环境，直接返回API_DIR目录下的server_result.txt文件--用于本地调试
         if tcl_command_list is None:
             logger.info("not send any command...")
@@ -60,27 +62,40 @@ class TCLSender:
             logger.debug("Waiting for server result done file...")
             time.sleep(1)
         # 4. 读取EDA工具返回结果, 规定结果文件为server_result.txt，按行读取存到list中返回
-        logger.info("Reading results from EDA tool")
-        server_result_txt_path = os.path.join(DEFAULT_CONFIG.get("api_dir"), "server_result.txt")
-        if not os.path.exists(server_result_txt_path):
-            logger.warning("Server result file does not exist, returning empty list")
-            return []
-        server_file = open(server_result_txt_path, "r")
-        eda_resp = [s.rstrip('\n') for s in server_file.readlines()]
-        os.remove(server_result_txt_path)
-        logger.info(f"Successfully read {len(eda_resp)} lines from server result")
-        return eda_resp
-
-
+        if return_result:
+            logger.info("Reading results from EDA tool")
+            server_result_txt_path = os.path.join(DEFAULT_CONFIG.get("api_dir"), "server_result.txt")
+            if not os.path.exists(server_result_txt_path):
+                logger.warning("Server result file does not exist, returning empty list")
+                return []
+            server_file = open(server_result_txt_path, "r")
+            eda_resp = [s.rstrip('\n') for s in server_file.readlines()]
+            os.remove(server_result_txt_path)
+            logger.info(f"Successfully read {len(eda_resp)} lines from server result")
+            return eda_resp
+        else:
+            # 将server_result.txt文件压缩成gz格式，也放在api_dir目录下
+            server_result_path = os.path.join(DEFAULT_CONFIG.get("api_dir"), "server_result.txt")
+            archive_path = os.path.join(DEFAULT_CONFIG.get("api_dir"), "netlist.gz")
+            
+            # 使用gzip压缩server_result.txt到netlist.gz
+            with open(server_result_path, 'rb') as f_in:
+                with gzip.open(archive_path, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            
+            # 删除原始的server_result.txt文件
+            os.remove(server_result_path)
+            
+            return [archive_path]
     # 发送tcl脚本
-    def send_tcl_file(self, tcl_file_path):
+    def send_tcl_file(self, tcl_file_path, return_result = True) -> list[str]:
         logger.info(f"Sending TCL file: {tcl_file_path}")
         # 1. 读取tcl文件
         with open(tcl_file_path, "r", encoding="utf-8") as f:
             tcl_command_list = f.readlines()
         logger.info(f"Loaded {len(tcl_command_list)} commands from TCL file")
         # 2. 发送tcl命令
-        eda_resp = self.send_tcl(tcl_command_list)
+        eda_resp = self.send_tcl(tcl_command_list, return_result)
         logger.info(f"TCL file execution completed, received {len(eda_resp)} lines of result")
         return eda_resp
 

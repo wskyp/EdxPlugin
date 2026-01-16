@@ -159,6 +159,15 @@
 curl -X GET http://localhost:5000/
 ```
 
+### API端点列表
+
+以下是可用的API端点：
+- `/<tool_name>/load_netlist` - 读取网表（返回JSON数据）
+- `/<tool_name>/download_netlist` - 下载压缩的网表文件
+- `/<tool_name>/get_timing` - 获取时序信息
+- `/<tool_name>/execute_tcl` - 执行TCL命令
+- `/<tool_name>/place_cells` - 执行Cell摆放
+
 ### 1. 读取网表 (`POST /<tool_name>/load_netlist`)
 
 为指定的EDA工具加载电路网表文件到内存中进行后续处理。
@@ -207,6 +216,39 @@ curl -X POST http://localhost:5000/leapr/load_netlist \
 ```
 
 > 注：响应中的data字段是Design对象，包含cells（单元格信息）、core_width和core_height（核心区域尺寸）、pin_to_cell（引脚到单元格的映射）和nets（网络连接信息）
+
+### 1.1 下载网表文件 (`GET /<tool_name>/download_netlist`)
+
+为指定的EDA工具下载压缩的网表文件，适用于大数据量的网表传输，避免通过HTTP响应体直接返回数据。
+
+#### 支持的工具名称
+- `leapr`
+
+#### 示例请求 (Leapr)
+```bash
+# 下载默认命名的压缩网表文件
+curl -X GET http://localhost:5000/leapr/download_netlist -O
+```
+
+#### 响应格式
+返回gzip压缩的文本文件，解压后内容格式如下：
+
+```
+=======design_info=======
+core_size: {core_width core_height}
+=======cell_info=======
+cell1
+width,height,MY,placed,loc_x,loc_y
+pin1|pin2|pinN
+cell2
+width,height,MY,placed,loc_x,loc_y
+pin1|pin2|pinN
+=======net_info=======
+net1,loadpin1|loadpin2|loadpinN,driverpin1
+net2,loadpin1|loadpin2|loadpinN,driverpin1
+```
+
+> 注：此接口用于优化大数据量传输性能，返回压缩的网表文件而非JSON响应
 
 ### 2. 获取时序信息 (`GET /<tool_name>/get_timing`)
 

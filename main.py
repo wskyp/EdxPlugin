@@ -35,7 +35,8 @@ class BaseEDA_Tool:
 
     def load_netlist(self) -> Design:
         raise NotImplementedError("Subclasses must implement this method")
-    
+    def download_netlist(self) -> str:
+        raise NotImplementedError("Subclasses must implement this method")
     def get_timing_info(self, topn=10) -> STA:
         raise NotImplementedError("Subclasses must implement this method")
     
@@ -70,7 +71,7 @@ class Leapr_Tool(BaseEDA_Tool):
             u_macc_top/macc[0].u_macc/adder_out_reg[15]/QN|u_macc_top/macc[0].u_macc/adder_out_reg[15]/D --- all pins join with,
         '''
         core_line = result[1]  # "core_size: {78.12 69.192}"
-        match = re.search(r'\{([\d.]+)\s+([\d.]+)}', core_line)
+        match = re.search(r'\{([\d.]+)\s+([\d.]+)\}', core_line)
         if match:
             my_design.core_width = float(match.group(1))
             my_design.core_height = float(match.group(2))
@@ -110,6 +111,26 @@ class Leapr_Tool(BaseEDA_Tool):
 
         logger.info(f"[Leapr] begin loading netlist: {netlist_file_path}")
         return my_design
+
+    def download_netlist(self) -> str:
+        """
+        生成压缩的网表文件
+        :param output_filename: 输出文件名
+        :return: 压缩文件路径
+        """
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        netlist_file_path = os.path.join(current_dir, 'leapr_api', "apicommon", "get_all_cell_info.tcl")
+        tcl_sender = TCLSender()
+        result = tcl_sender.send_tcl_file(netlist_file_path, return_result=False)
+        if len(result) != 1:
+            logger.error(f"[Leapr] generate_compressed_netlist error: {result}")
+            return ""
+        server_result_txt = result[0]
+        # 判断server_result_txt文件是否存在
+        if not os.path.exists(server_result_txt):
+            logger.error(f"[Leapr] generate_compressed_netlist error: {server_result_txt} not exists")
+            return ""
+        return result[0]
 
     def get_timing_info(self, topn=10) -> STA:
         """Leapr特有的时序分析功能
@@ -213,6 +234,7 @@ def home():
                         for tool, config in DEFAULT_CONFIG.items()},
         "endpoints": [
             "/<tool_name>/load_netlist",
+            "/<tool_name>/download_netlist",
             "/<tool_name>/get_timing",
             "/<tool_name>/execute_tcl",
             "/<tool_name>/place_cells"
@@ -241,6 +263,36 @@ def load_netlist(tool_name):
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[{tool_name}] 加载网表时发生未预期异常: {error_msg}")
+        return jsonify(EdxResponse(500, "Internal server error").to_dict()), 500
+
+
+@app.route('/<tool_name>/download_netlist', methods=['GET'])
+def download_netlist(tool_name):
+    """
+    下载网表文件 - 返回压缩的网表文件
+    """
+    logger.info(f"接收到[{tool_name}]的下载网表请求")
+    try:
+        if tool_name not in eda_tools:
+            error_msg = f"Unsupported EDA tool: {tool_name}. Supported tools: {list(eda_tools.keys())}"
+            logger.error(error_msg)
+            return jsonify(EdxResponse(400, error_msg).to_dict()), 400
+        
+        # 生成压缩的网表文件
+        compressed_file_path = eda_tools[tool_name].download_netlist()
+        if len(compressed_file_path) < 1:
+            error_msg = f"[{tool_name}] 网表文件生成失败"
+            logger.error(error_msg)
+            return jsonify(EdxResponse(500, error_msg).to_dict()), 500
+        
+        # 返回文件供下载
+        from flask import send_file
+        logger.info(f"[{tool_name}] 网表文件生成成功，准备返回下载: {compressed_file_path}")
+        return send_file(compressed_file_path, as_attachment=True, download_name=os.path.basename(compressed_file_path))
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"[{tool_name}] 生成网表文件时发生未预期异常: {error_msg}")
         return jsonify(EdxResponse(500, "Internal server error").to_dict()), 500
 
 

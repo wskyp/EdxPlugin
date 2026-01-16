@@ -258,6 +258,54 @@ test_place_cells() {
     echo
 }
 
+# 测试下载网表文件接口
+test_download_netlist() {
+    print_header "测试 7: 下载网表文件接口"
+    print_info "GET http://localhost:5000/leapr/download_netlist"
+    
+    # 创建临时文件来保存下载的网表
+    temp_download_file="/tmp/netlist_test.gz"
+    
+    # 执行下载请求
+    response=$(curl -s -w "\n%{http_code}\n%{time_total}" \
+        -X GET "${API_BASE_URL}/leapr/download_netlist" \
+        -H "Content-Type: application/json" \
+        --output "$temp_download_file")
+    
+    # 获取响应状态码和时间
+    last_line=$(echo "$response" | tail -n 1)
+    second_last_line=$(echo "$response" | tail -n 2 | head -n 1)
+    http_code=$second_last_line
+    time_total=$last_line
+    
+    if [ "$http_code" -eq 200 ]; then
+        # 检查下载的文件是否存在且不为空
+        if [ -f "$temp_download_file" ] && [ -s "$temp_download_file" ]; then
+            file_size=$(stat -c%s "$temp_download_file" 2>/dev/null || stat -f%z "$temp_download_file" 2>/dev/null || echo 0)
+            print_success "下载网表文件接口测试成功，状态码: $http_code，响应时间: ${time_total}s，文件大小: ${file_size} bytes"
+            
+            # 尝试解压并查看部分内容
+            print_info "下载的压缩文件内容预览:"
+            gunzip -c "$temp_download_file" | head -n 10
+            if [ $(gunzip -c "$temp_download_file" | wc -l) -gt 10 ]; then
+                print_warning "... (仅显示前10行)"
+            fi
+            
+            ((success_count++))
+        else
+            print_error "下载网表文件接口测试失败，状态码: $http_code，但下载的文件不存在或为空"
+            ((failure_count++))
+        fi
+    else
+        print_error "下载网表文件接口测试失败，状态码: $http_code，响应时间: ${time_total}s"
+        ((failure_count++))
+    fi
+    
+    # 清理临时文件
+    rm -f "$temp_download_file"
+    echo
+}
+
 # 综合测试：获取时序路径，移动终点cell，比较slack变化
 test_timing_slack_change() {
     print_header "测试 6: 时序slack变化测试"
@@ -343,7 +391,7 @@ test_timing_slack_change() {
         response=$(curl -s -w "\n%{http_code}\n%{time_total}" \
             -X POST http://localhost:5000/leapr/execute_tcl \
             -H "Content-Type: application/json" \
-            -d '{"commands": ["bind_design","opt_design"]}')
+            -d '{"commands": ["bind_design"]}')
         body=$(echo "$response" | sed -n '1,/^200$/p' | sed '$d')
         if [ "$http_code" -ne 200 ]; then
             print_error "执行tcl命令: bind_design 失败，状态码: $http_code，响应时间: ${time_total}s"
@@ -530,6 +578,7 @@ test_get_timing_with_topn_3
 test_execute_tcl
 test_place_cells
 test_timing_slack_change
+test_download_netlist
 
 # 打印测试结果统计
 print_test_summary
